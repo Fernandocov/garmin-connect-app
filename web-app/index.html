@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Garmin Activity Feed</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f14;
+      --surface:  #161b24;
+      --surface2: #1e2535;
+      --border:   #2a3347;
+      --accent:   #00c8ff;
+      --accent2:  #0076ff;
+      --text:     #e8edf5;
+      --muted:    #7a8aaa;
+      --run:      #00c8ff;
+      --cycling:  #ffb300;
+      --swimming: #00e5b0;
+      --strength: #ff5c5c;
+      --walking:  #a78bfa;
+      --other:    #94a3b8;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+    .sync-btn {
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border: none;
+      color: #000;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sync-btn:hover { opacity: 0.85; }
+    .sync-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .sync-btn .spin { animation: spin 0.8s linear infinite; display: inline-block; }
+
+    .last-sync-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Layout ── */
+    main { max-width: 680px; margin: 0 auto; padding: 28px 16px; }
+
+    .feed-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .feed-header h2 { font-size: 20px; font-weight: 700; }
+    .count-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 10px; border-radius: 20px; font-size: 12px;
+    }
+
+    /* ── Cards ── */
+    .feed { display: flex; flex-direction: column; gap: 12px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      transition: border-color 0.15s, transform 0.1s;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--type-color, var(--other));
+      border-radius: 3px 0 0 3px;
+    }
+    .card:hover {
+      border-color: var(--type-color, var(--accent));
+      transform: translateY(-1px);
+    }
+
+    .card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+
+    .type-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: color-mix(in srgb, var(--type-color, var(--other)) 15%, transparent);
+      border: 1px solid color-mix(in srgb, var(--type-color, var(--other)) 30%, transparent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .card-title { flex: 1; min-width: 0; }
+    .card-title h3 {
+      font-size: 15px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-title .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .card-stats { display: flex; gap: 20px; }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-value {
+      font-size: 22px; font-weight: 700; line-height: 1;
+      color: var(--type-color, var(--text));
+    }
+    .stat-label {
+      font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .divider { width: 1px; background: var(--border); align-self: stretch; }
+
+    /* ── States ── */
+    .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .state .icon { font-size: 40px; margin-bottom: 12px; }
+    .state p { font-size: 15px; }
+    .state small { font-size: 12px; display: block; margin-top: 8px; }
+
+    .spinner-center {
+      width: 36px; height: 36px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 20px; border-radius: 8px;
+      font-size: 13px; z-index: 100;
+      animation: fadeup 0.2s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    @keyframes fadeup { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+
+    .load-more {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); width: 100%; padding: 12px; border-radius: 10px;
+      font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px;
+      transition: background 0.15s;
+    }
+    .load-more:hover { background: var(--border); }
+    .load-more:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .error-msg {
+      background: rgba(255,92,92,0.08); border: 1px solid rgba(255,92,92,0.3);
+      border-radius: 10px; padding: 14px 18px; color: #ff8a8a;
+      font-size: 13px; margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏃</div>
+  <h1>Activity Feed</h1>
+  <div class="header-right">
+    <span class="last-sync-label" id="last-sync-label">Loading…</span>
+    <button class="sync-btn" id="sync-btn" onclick="sync()">⟳ Sync</button>
+  </div>
+</header>
+
+<main>
+  <div class="feed-header">
+    <h2>Recent Activities</h2>
+    <span class="count-badge" id="count-badge">—</span>
+  </div>
+  <div id="error-box" class="error-msg" style="display:none"></div>
+  <div id="feed" class="feed"></div>
+</main>
+
+<script>
+  const ACTIVITY_TYPES = {
+    running:             { label: 'Running',       icon: '🏃', color: 'var(--run)' },
+    cycling:             { label: 'Cycling',        icon: '🚴', color: 'var(--cycling)' },
+    swimming:            { label: 'Swimming',       icon: '🏊', color: 'var(--swimming)' },
+    strength_training:   { label: 'Strength',       icon: '🏋️', color: 'var(--strength)' },
+    walking:             { label: 'Walking',        icon: '🚶', color: 'var(--walking)' },
+    hiking:              { label: 'Hiking',         icon: '🥾', color: 'var(--walking)' },
+    indoor_cycling:      { label: 'Indoor Cycling', icon: '🚴', color: 'var(--cycling)' },
+    trail_running:       { label: 'Trail Running',  icon: '🏔️', color: 'var(--run)' },
+    open_water_swimming: { label: 'Open Water',     icon: '🌊', color: 'var(--swimming)' },
+  };
+
+  function getTypeInfo(raw) {
+    if (!raw) return { label: 'Activity', icon: '⚡', color: 'var(--other)' };
+    const key = raw.toLowerCase().replace(/\s+/g, '_');
+    return ACTIVITY_TYPES[key] ?? { label: raw, icon: '⚡', color: 'var(--other)' };
+  }
+
+  function formatDuration(secs) {
+    if (!secs) return null;
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+      : `${m}:${String(s).padStart(2,'0')}`;
+  }
+
+  function formatDistance(meters) {
+    if (!meters) return null;
+    const km = meters / 1000;
+    return km >= 1 ? `${km.toFixed(2)} km` : `${Math.round(meters)} m`;
+  }
+
+  function formatDate(str) {
+    if (!str) return '';
+    const d = new Date(str);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function timeAgo(ts) {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  function renderCard(a) {
+    const typeName = a.activityType?.typeKey ?? a.activityType?.displayName ?? '';
+    const { label, icon, color } = getTypeInfo(typeName);
+    const name = a.activityName || label;
+    const date = formatDate(a.startTimeLocal ?? a.startTimeGMT);
+    const dist = formatDistance(a.distance);
+    const dur  = formatDuration(a.duration ?? a.movingDuration);
+
+    const statsHtml = [
+      dist ? `<div class="stat"><span class="stat-value">${dist}</span><span class="stat-label">Distance</span></div>` : '',
+      dist && dur ? '<div class="divider"></div>' : '',
+      dur  ? `<div class="stat"><span class="stat-value">${dur}</span><span class="stat-label">Duration</span></div>` : '',
+    ].join('');
+
+    return `
+      <div class="card" style="--type-color:${color}">
+        <div class="card-top">
+          <div class="type-icon">${icon}</div>
+          <div class="card-title">
+            <h3>${name}</h3>
+            <div class="meta">${label}&nbsp;·&nbsp;${date}</div>
+          </div>
+        </div>
+        ${statsHtml ? `<div class="card-stats">${statsHtml}</div>` : ''}
+      </div>`;
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  let activities = [];
+  let totalInDB  = 0;
+  let offset     = 0;
+  const PAGE     = 20;
+  let loading    = false;
+
+  function setError(msg) {
+    const box = document.getElementById('error-box');
+    if (msg) { box.textContent = msg; box.style.display = 'block'; }
+    else box.style.display = 'none';
+  }
+
+  function toast(msg, duration = 3000) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), duration);
+  }
+
+  function updateSyncLabel(lastSync) {
+    const el = document.getElementById('last-sync-label');
+    el.textContent = lastSync ? `Synced ${timeAgo(lastSync.synced_at)}` : 'Never synced';
+  }
+
+  function renderFeed(replace = false) {
+    const feed = document.getElementById('feed');
+    const cards = activities.map(renderCard).join('');
+
+    if (replace) {
+      feed.innerHTML = cards;
+    } else {
+      // Remove old load-more before appending
+      feed.querySelector('.load-more')?.remove();
+      feed.insertAdjacentHTML('beforeend', cards);
+    }
+
+    document.getElementById('count-badge').textContent =
+      `${activities.length} of ${totalInDB}`;
+
+    if (activities.length < totalInDB) {
+      const btn = document.createElement('button');
+      btn.className = 'load-more';
+      btn.textContent = `Load more (${totalInDB - activities.length} remaining)`;
+      btn.onclick = loadMore;
+      feed.appendChild(btn);
+    }
+  }
+
+  // ── API calls ──────────────────────────────────────────────────────────────
+
+  async function fetchPage(limit, off) {
+    const res = await fetch(`/api/activities?limit=${limit}&offset=${off}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+    return res.json();
+  }
+
+  async function loadInitial() {
+    if (loading) return;
+    loading = true;
+    setError(null);
+    document.getElementById('feed').innerHTML =
+      `<div class="state"><div class="spinner-center"></div><p>Loading from cache…</p></div>`;
+
+    try {
+      const { activities: data, total, lastSync } = await fetchPage(PAGE, 0);
+      activities = data;
+      totalInDB  = total;
+      offset     = 0;
+      updateSyncLabel(lastSync);
+
+      if (data.length === 0) {
+        document.getElementById('feed').innerHTML = `
+          <div class="state">
+            <div class="icon">📭</div>
+            <p>No activities yet.</p>
+            <small>Hit <strong>Sync</strong> to fetch from Garmin.</small>
+          </div>`;
+        document.getElementById('count-badge').textContent = '0 activities';
+      } else {
+        renderFeed(true);
+      }
+    } catch (e) {
+      setError('Could not load activities: ' + e.message);
+      document.getElementById('feed').innerHTML =
+        `<div class="state"><div class="icon">🔌</div><p>Make sure the server is running.</p></div>`;
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadMore() {
+    if (loading) return;
+    loading = true;
+    try {
+      const newOffset = offset + PAGE;
+      const { activities: more, total } = await fetchPage(PAGE, newOffset);
+      if (more.length) {
+        offset     = newOffset;
+        totalInDB  = total;
+        activities = [...activities, ...more];
+        renderFeed(false);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function sync() {
+    const btn = document.getElementById('sync-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin">⟳</span> Syncing…';
+    setError(null);
+    try {
+      const res = await fetch('/api/sync', { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+      const { fetched, total } = await res.json();
+      totalInDB = total;
+      toast(`✓ Synced ${fetched} activities`);
+      await loadInitial();
+    } catch (e) {
+      setError('Sync failed: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '⟳ Sync';
+    }
+  }
+
+  loadInitial();
+</script>
+</body>
+</html>

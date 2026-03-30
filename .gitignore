@@ -1,0 +1,9 @@
+node_modules/
+build/
+*.tsbuildinfo
+.env
+*.db
+*.db-journal
+.DS_Store
+Untitled-1
+tsup.config.bundled_*.mjs
